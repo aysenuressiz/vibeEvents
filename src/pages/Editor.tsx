@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { motion } from "motion/react";
 import { Button } from "@/components/ui/button";
@@ -6,8 +6,9 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ImagePlus, Calendar, MapPin, Link as LinkIcon, Save, MessageSquare } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
-import { db } from "@/firebase";
+import { db, storage } from "@/firebase";
 import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { toast } from "sonner";
 import { handleFirestoreError, OperationType } from "@/utils/errorHandling";
 
@@ -17,7 +18,9 @@ export function Editor() {
   const { slug: editSlug } = useParams();
   
   const [isPublishing, setIsPublishing] = useState(false);
+  const [isUploadingCover, setIsUploadingCover] = useState(false);
   const [loading, setLoading] = useState(!!editSlug);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [formData, setFormData] = useState({
     title: "",
     story: "",
@@ -82,6 +85,58 @@ export function Editor() {
       .replace(/^-+|-+$/g, '') || 'etkinlik';
   };
 
+  const compressImage = (file: File, maxWidth = 1920, quality = 0.8): Promise<File> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target?.result as string;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const ratio = Math.min(maxWidth / img.width, 1);
+          canvas.width = img.width * ratio;
+          canvas.height = img.height * ratio;
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, canvas.width, canvas.height);
+          canvas.toBlob((blob) => {
+            if (blob) {
+              resolve(new File([blob], file.name, { type: 'image/jpeg', lastModified: Date.now() }));
+            } else {
+              reject(new Error("Compression failed"));
+            }
+          }, 'image/jpeg', quality);
+        };
+        img.onerror = (error) => reject(error);
+      };
+      reader.onerror = (error) => reject(error);
+    });
+  };
+
+  const handleCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+
+    setIsUploadingCover(true);
+    try {
+      const compressedFile = await compressImage(file);
+      const storageRef = ref(storage, `covers/${user.uid}/${Date.now()}_${compressedFile.name}`);
+      await uploadBytes(storageRef, compressedFile);
+      const url = await getDownloadURL(storageRef);
+      
+      setFormData(prev => ({ ...prev, coverImage: url }));
+      toast.success("Kapak fotoğrafı yüklendi!");
+    } catch (error) {
+      toast.error("Fotoğraf yüklenirken bir hata oluştu.");
+      console.error(error);
+    } finally {
+      setIsUploadingCover(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
   const handlePublish = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
@@ -138,8 +193,16 @@ export function Editor() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
             className="group relative aspect-video md:aspect-[21/9] rounded-3xl overflow-hidden bg-charcoal/5 border border-charcoal/10 flex flex-col items-center justify-center transition-all hover:bg-charcoal/10 cursor-pointer"
+            onClick={() => fileInputRef.current?.click()}
           >
-            {formData.coverImage ? (
+            {isUploadingCover ? (
+              <div className="text-center space-y-4 p-6">
+                <div className="w-16 h-16 rounded-full bg-ivory shadow-sm flex items-center justify-center mx-auto text-charcoal/40">
+                  <div className="w-6 h-6 border-2 border-charcoal/20 border-t-charcoal rounded-full animate-spin" />
+                </div>
+                <p className="text-sm font-medium text-charcoal/60">Yükleniyor...</p>
+              </div>
+            ) : formData.coverImage ? (
               <img 
                 src={formData.coverImage} 
                 alt="Kapak" 
@@ -155,6 +218,13 @@ export function Editor() {
                 <p className="text-xs text-charcoal/40">Yüksek çözünürlük önerilir (1920x1080)</p>
               </div>
             )}
+            <input 
+              type="file"
+              ref={fileInputRef}
+              className="hidden"
+              accept="image/*"
+              onChange={handleCoverUpload}
+            />
             <input 
               type="text" 
               placeholder="Veya görsel URL'si yapıştırın..."
