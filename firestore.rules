@@ -1,0 +1,97 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+    
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function validStringLength(field, minLen, maxLen) {
+      return request.resource.data[field] is string &&
+        request.resource.data[field].size() >= minLen &&
+        request.resource.data[field].size() <= maxLen;
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+    function isValidUser() {
+      return hasRequiredFields(['name', 'email', 'createdAt']) &&
+             validStringLength('name', 1, 100) &&
+             validStringLength('email', 3, 150);
+    }
+
+    function isValidEvent() {
+      return hasRequiredFields(['hostId', 'slug', 'title', 'date', 'createdAt']) &&
+             request.resource.data.hostId == request.auth.uid &&
+             validStringLength('slug', 1, 100) &&
+             validStringLength('title', 1, 200) &&
+             (!('story' in request.resource.data) || validStringLength('story', 0, 10000)) &&
+             (!('coverImage' in request.resource.data) || validStringLength('coverImage', 0, 2000)) &&
+             (!('location' in request.resource.data) || validStringLength('location', 0, 500)) &&
+             (!('driveLink' in request.resource.data) || validStringLength('driveLink', 0, 2000)) &&
+             (!('customQuestion' in request.resource.data) || validStringLength('customQuestion', 0, 200));
+    }
+
+    function isValidRSVP() {
+      return hasRequiredFields(['eventId', 'guestName', 'status', 'createdAt']) &&
+             validStringLength('eventId', 1, 100) &&
+             validStringLength('guestName', 1, 100) &&
+             request.resource.data.status in ['attending', 'declined'] &&
+             (!('guestAnswer' in request.resource.data) || validStringLength('guestAnswer', 0, 1000));
+    }
+
+    function isValidPhoto() {
+      return hasRequiredFields(['eventId', 'uploaderName', 'imageUrl', 'createdAt']) &&
+             validStringLength('eventId', 1, 100) &&
+             validStringLength('uploaderName', 1, 100) &&
+             validStringLength('imageUrl', 1, 2000);
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+    
+    match /users/{userId} {
+      allow read, update, delete: if isOwner(userId);
+      allow create: if isAuthenticated() && request.auth.uid == userId && isValidUser();
+    }
+
+    match /events/{eventId} {
+      // Publicly readable so guests can see the event via link/QR
+      allow read: if true;
+      allow create: if isAuthenticated() && isValidEvent();
+      allow update: if isAuthenticated() && resource.data.hostId == request.auth.uid && isValidEvent() && request.resource.data.hostId == resource.data.hostId;
+      allow delete: if isAuthenticated() && resource.data.hostId == request.auth.uid;
+    }
+
+    match /rsvps/{rsvpId} {
+      // Publicly readable and creatable for guests
+      allow read: if true;
+      allow create: if isValidRSVP();
+      allow update, delete: if false; // RSVPs cannot be modified or deleted once created
+    }
+
+    match /photos/{photoId} {
+      // Publicly readable and creatable for guests
+      allow read: if true;
+      allow create: if isValidPhoto();
+      allow update, delete: if false; // Photos cannot be modified or deleted once created
+    }
+  }
+}

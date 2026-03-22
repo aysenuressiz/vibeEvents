@@ -1,0 +1,74 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "A user of the application",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "email", "createdAt"]
+    },
+    "Event": {
+      "title": "Event",
+      "description": "An event created by a user",
+      "type": "object",
+      "properties": {
+        "hostId": { "type": "string" },
+        "slug": { "type": "string" },
+        "title": { "type": "string" },
+        "story": { "type": "string" },
+        "coverImage": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "location": { "type": "string" },
+        "driveLink": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["hostId", "slug", "title", "date", "createdAt"]
+    },
+    "RSVP": {
+      "title": "RSVP",
+      "description": "A guest's response to an event",
+      "type": "object",
+      "properties": {
+        "eventId": { "type": "string" },
+        "guestName": { "type": "string" },
+        "status": { "type": "string", "enum": ["attending", "declined"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["eventId", "guestName", "status", "createdAt"]
+    },
+    "Photo": {
+      "title": "Photo",
+      "description": "A photo uploaded by a guest",
+      "type": "object",
+      "properties": {
+        "eventId": { "type": "string" },
+        "uploaderName": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["eventId", "uploaderName", "imageUrl", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User profiles"
+    },
+    "/events/{eventId}": {
+      "schema": { "$ref": "#/entities/Event" },
+      "description": "Events created by users"
+    },
+    "/rsvps/{rsvpId}": {
+      "schema": { "$ref": "#/entities/RSVP" },
+      "description": "RSVPs for events"
+    },
+    "/photos/{photoId}": {
+      "schema": { "$ref": "#/entities/Photo" },
+      "description": "Photos uploaded for events"
+    }
+  }
+}
