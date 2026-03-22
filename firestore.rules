@@ -60,7 +60,7 @@ service cloud.firestore {
       return hasRequiredFields(['eventId', 'uploaderName', 'imageUrl', 'createdAt']) &&
              validStringLength('eventId', 1, 100) &&
              validStringLength('uploaderName', 1, 100) &&
-             validStringLength('imageUrl', 1, 2000);
+             validStringLength('imageUrl', 1, 1000000);
     }
 
     // ===============================================================

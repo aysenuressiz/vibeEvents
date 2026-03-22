@@ -109,7 +109,7 @@ export function Event() {
     }
   };
 
-  const compressImage = (file: File, maxWidth = 1920, quality = 0.8): Promise<File> => {
+  const compressImage = (file: File, maxWidth = 800, quality = 0.6): Promise<string> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.readAsDataURL(file);
@@ -130,26 +130,13 @@ export function Event() {
           canvas.height = height;
           const ctx = canvas.getContext('2d');
           if (!ctx) {
-            resolve(file);
+            reject(new Error("Canvas context failed"));
             return;
           }
           ctx.drawImage(img, 0, 0, width, height);
 
-          canvas.toBlob(
-            (blob) => {
-              if (blob) {
-                const newFile = new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".jpg", {
-                  type: 'image/jpeg',
-                  lastModified: Date.now(),
-                });
-                resolve(newFile);
-              } else {
-                resolve(file);
-              }
-            },
-            'image/jpeg',
-            quality
-          );
+          const base64String = canvas.toDataURL('image/jpeg', quality);
+          resolve(base64String);
         };
         img.onerror = (error) => reject(error);
       };
@@ -165,15 +152,12 @@ export function Event() {
     try {
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        const compressedFile = await compressImage(file);
-        const storageRef = ref(storage, `events/${slug}/${Date.now()}_${compressedFile.name}`);
-        await uploadBytes(storageRef, compressedFile);
-        const url = await getDownloadURL(storageRef);
+        const base64Image = await compressImage(file);
         
         await addDoc(collection(db, "photos"), {
           eventId: slug,
           uploaderName: guestName || "Misafir",
-          imageUrl: url,
+          imageUrl: base64Image,
           createdAt: serverTimestamp()
         });
       }
